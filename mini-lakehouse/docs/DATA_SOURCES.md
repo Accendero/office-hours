@@ -38,7 +38,7 @@ module 3 in one sentence, made by the data owner.
 ## Not used, but referenced
 
 - **NYC 311 Service Requests** (NYC Open Data / Socrata, no API key) — real free text, real
-  bureaucratic mess. Mentioned in `MESSY_SOURCES.md`; never downloaded here.
+  bureaucratic mess. Never downloaded here.
 - **Loghub** (logpai, via Zenodo) — genuinely real system logs, distributed **for research
   purposes**. Mentioned only. If you ever add it, check the licence first.
 
