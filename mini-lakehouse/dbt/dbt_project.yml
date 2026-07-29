@@ -1,0 +1,22 @@
+name: mini_lakehouse
+version: "1.0.0"
+config-version: 2
+profile: mini_lakehouse
+model-paths: ["models"]
+target-path: "target"
+clean-targets: ["target", "dbt_packages"]
+
+models:
+  mini_lakehouse:
+    staging:
+      +schema: silver
+      +materialized: table
+      quarantine:
+        +schema: silver
+        +materialized: table
+    marts:
+      +schema: gold
+      +materialized: table
+      quarantine:
+        +schema: gold
+        +materialized: table

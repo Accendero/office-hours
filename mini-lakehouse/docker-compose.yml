@@ -1,0 +1,142 @@
+# Laptop-only. ~6-7 GB RAM total. See CLAUDE.md before debugging.
+# Every tag is pinned on purpose -- MinIO was archived mid-design.
+
+services:
+
+  # ---------------------------------------------------------------- object store
+  # Replaces MinIO (Community Edition archived 12 Feb 2026).
+  # `server -s3` starts master + volume + filer + S3 gateway in one container.
+  seaweedfs:
+    image: chrislusf/seaweedfs:3.80
+    container_name: lakehouse-s3
+    command: >
+      server -s3 -dir=/data -ip.bind=0.0.0.0
+      -s3.config=/etc/seaweedfs/s3.json
+      -master.volumeSizeLimitMB=1024
+    ports:
+      - "8333:8333"   # S3 API
+      - "9333:9333"   # master UI
+      - "8888:8888"   # filer
+    volumes:
+      - seaweedfs_data:/data
+      - ./seaweedfs/s3.json:/etc/seaweedfs/s3.json:ro
+    healthcheck:
+      # SeaweedFS S3 returns 403 to an unsigned list -- that still proves it's listening.
+      test: ["CMD-SHELL", "wget -qO- http://localhost:9333/cluster/status || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # ------------------------------------------------------------- iceberg catalog
+  nessie:
+    image: ghcr.io/projectnessie/nessie:0.108.1
+    container_name: lakehouse-catalog
+    depends_on:
+      seaweedfs:
+        condition: service_healthy
+    ports:
+      - "19120:19120"
+    environment:
+      # In-memory version store: fine for a teaching rig, gone on `make reset`.
+      # RISK: for durable local state switch to JDBC+Postgres. Not needed for the tutorial.
+      nessie.version.store.type: IN_MEMORY
+
+      # Warehouse definition. Nessie hands these locations to Trino over REST.
+      nessie.catalog.default-warehouse: warehouse
+      nessie.catalog.warehouses.warehouse.location: s3://lakehouse/warehouse
+
+      # RISK: highest-risk block in the file. Nessie's S3 option keys have moved
+      # across releases. If Trino gets a bad warehouse location or 403s on write,
+      # start here and check the Nessie release notes for the pinned tag.
+      nessie.catalog.service.s3.default-options.endpoint: http://seaweedfs:8333
+      nessie.catalog.service.s3.default-options.path-style-access: "true"
+      nessie.catalog.service.s3.default-options.region: us-east-1
+      nessie.catalog.service.s3.default-options.access-key: urn:nessie-secret:quarkus:nessie-s3
+      nessie.s3.default-options.auth-type: STATIC
+      nessie-s3.name: lakehouse
+      nessie-s3.secret: lakehouse-local-secret
+
+      # Trino does NOT support S3 request signing, so credential vending must stay off
+      # and Trino uses its own keys (see trino/etc/catalog/iceberg.properties).
+      nessie.catalog.service.s3.default-options.request-signing-enabled: "false"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:19120/api/v2/config || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # --------------------------------------------------------------- query engine
+  trino:
+    image: trinodb/trino:483
+    container_name: lakehouse-engine
+    depends_on:
+      nessie:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    environment:
+      # Heap set here rather than by replacing Trino's own tuned jvm.config --
+      # much lower risk. Drop to -Xmx1500m on an 8 GB machine.
+      JAVA_TOOL_OPTIONS: ${TRINO_HEAP:--Xmx2g}
+    volumes:
+      - ./trino/etc/catalog:/etc/trino/catalog:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/v1/info | grep -q '\"starting\":false' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  # ------------------------------------------------------- mlflow backing store
+  mlflow-db:
+    image: postgres:16-alpine
+    container_name: lakehouse-mlflow-db
+    environment:
+      POSTGRES_USER: mlflow
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mlflow-local-secret}
+      POSTGRES_DB: mlflow
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mlflow"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # ------------------------------------------------------------------- tracking
+  # A DATABASE BACKEND IS MANDATORY. MLflow 3.x raises on the filesystem store.
+  # Do not "simplify" this back to file:./mlruns -- it will not work.
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v3.14.0
+    container_name: lakehouse-mlflow
+    depends_on:
+      mlflow-db:
+        condition: service_healthy
+      seaweedfs:
+        condition: service_healthy
+    ports:
+      - "5000:5000"
+    environment:
+      MLFLOW_S3_ENDPOINT_URL: http://seaweedfs:8333
+      AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY:-lakehouse}
+      AWS_SECRET_ACCESS_KEY: ${S3_SECRET_KEY:-lakehouse-local-secret}
+      AWS_DEFAULT_REGION: us-east-1
+    # The official image ships without psycopg2/boto3, so install then serve.
+    entrypoint: >
+      /bin/sh -c "pip install --no-cache-dir psycopg2-binary boto3 >/dev/null 2>&1 &&
+      mlflow server
+      --backend-store-uri postgresql://mlflow:${POSTGRES_PASSWORD:-mlflow-local-secret}@mlflow-db:5432/mlflow
+      --default-artifact-root s3://lakehouse/mlflow-artifacts
+      --host 0.0.0.0 --port 5000"
+    healthcheck:
+      # The official mlflow image ships no curl/wget -- python3 is the only HTTP
+      # client available in-container. `docker compose ps` always showed "unhealthy"
+      # here even though the server itself was fine (verified: curl from the host
+      # to :5000/health got 200 while this healthcheck failed with "curl: not found").
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:5000/health')\" || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+volumes:
+  seaweedfs_data:
+  pgdata:

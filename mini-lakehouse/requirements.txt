@@ -1,0 +1,23 @@
+# Pinned deliberately -- see CLAUDE.md. Verified current July 2026.
+dbt-core==1.12.0
+dbt-trino==1.10.3
+trino==0.338.0
+mlflow==3.14.0
+psycopg2-binary==2.9.10
+# RISK: boto3/botocore must stay inside whatever range aiobotocore (pulled in by
+# pyiceberg's s3fs extra below) currently supports -- aiobotocore always trails
+# botocore's release by weeks to months. If you bump boto3 and installs start
+# failing with a "ResolutionImpossible" mentioning fsspec or botocore, that's why.
+# See docs/TROUBLESHOOTING.md #0.
+boto3==1.43.46
+pyiceberg[s3fs,pyarrow]==0.11.1
+pyarrow==18.1.0
+pandas==2.3.3
+scikit-learn==1.7.2
+duckdb==1.5.5
+
+# awscli (pip package) deliberately NOT installed here: v1 hard-pins an exact
+# botocore that is permanently incompatible with aiobotocore/s3fs above. Nothing
+# in this repo imports boto3/awscli in Python -- the `aws` binary used by
+# smoke.sh and 00_init_object_store.sh should come from the standalone AWS CLI
+# v2 installer instead. See docs/TROUBLESHOOTING.md #0.

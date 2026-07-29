@@ -1,0 +1,23 @@
+# Never commit data. The repo ships download scripts only.
+data/
+warehouse/
+*.duckdb
+*.duckdb.wal
+
+# Local state
+.env
+seaweedfs_data/
+pgdata/
+mlruns/
+mlflow.db
+
+# dbt
+dbt/target/
+dbt/dbt_packages/
+dbt/logs/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/

@@ -1,0 +1,13 @@
+version: 2
+sources:
+  - name: bronze
+    catalog: iceberg
+    schema: bronze
+    description: "Landed verbatim. All text as text; no cast that can fail."
+    tables:
+      - name: raw_trips
+        description: "Source A + A'. Two months; the 2024 file lacks cbd_congestion_fee."
+      - name: raw_ghcn
+        description: "Source B. Long/narrow, one row per element per day, all VARCHAR."
+      - name: raw_zone_lookup
+        description: "Source C. CSV dimension, all VARCHAR."

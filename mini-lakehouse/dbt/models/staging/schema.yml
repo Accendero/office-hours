@@ -1,0 +1,61 @@
+version: 2
+
+# THE PROMOTION GATE. `dbt test` is the gate -- zero extra infrastructure, already in the
+# project, version-controlled beside the models. Great Expectations 1.x removed the entire
+# pre-1.0 API most tutorials still show; adding a second framework before dbt's own tests
+# are exhausted is exactly the premature layering this tutorial argues against.
+#
+# Note the mix: not_null and dbt_utils-style range checks catch TYPE problems, but
+# accepted_values and relationships are what catch STRUCTURAL corruption. A gate built
+# only from type and null checks passes the defects that matter most.
+
+models:
+  - name: stg_trips
+    description: "Silver: typed, deduped, filtered TLC trips."
+    columns:
+      - name: pickup_at
+        description: "Trip start. Natural key component."
+        tests: [not_null]
+      - name: vendor_id
+        tests: [not_null]
+      - name: fare_amount
+        description: "Strictly positive after silver filtering."
+        tests:
+          - not_null
+          - dbt_utils.accepted_range: {min_value: 0, inclusive: false}
+      - name: trip_duration_s
+        tests:
+          - not_null
+          - dbt_utils.accepted_range: {min_value: 60, max_value: 10800}
+      - name: passenger_count
+        tests:
+          - dbt_utils.accepted_range: {min_value: 1, max_value: 6}
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            [vendor_id, pickup_at, dropoff_at, pickup_location_id, dropoff_location_id, total_amount]
+
+  - name: stg_weather_daily
+    description: "Silver: GHCN, QC-filtered, pivoted wide, rescaled to real units."
+    columns:
+      - name: obs_date
+        tests: [not_null, unique]
+      - name: precip_mm
+        description: "Real mm. If these look 10x large, the tenths rescale was missed."
+        tests:
+          - dbt_utils.accepted_range: {min_value: 0, max_value: 500}
+      - name: tmax_c
+        tests:
+          - dbt_utils.accepted_range: {min_value: -40, max_value: 50}
+
+  - name: stg_zone_lookup
+    description: "Silver: typed + domain-checked zone dimension."
+    columns:
+      - name: location_id
+        tests: [not_null, unique]
+      - name: borough
+        description: "Domain check. This is what catches CSV field shift."
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Manhattan', 'Brooklyn', 'Queens', 'Bronx', 'Staten Island', 'EWR']

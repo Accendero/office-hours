@@ -1,0 +1,35 @@
+version: 2
+
+models:
+  - name: fct_trips
+    description: "Gold: model-ready fact table. Trips + derived features + weather + boroughs."
+    meta:
+      owner: "seniorleadership@accendero.com"
+    columns:
+      - name: pickup_at
+        tests: [not_null]
+      - name: trip_duration_min
+        description: "Prediction target."
+        tests:
+          - not_null
+          - dbt_utils.accepted_range: {min_value: 1, max_value: 180}
+      - name: avg_speed_mph
+        description: "Physical plausibility guard."
+        tests:
+          - dbt_utils.accepted_range: {min_value: 0, max_value: 80, inclusive: false}
+      - name: tip_rate
+        description: >
+          Bounded. This is the check that catches the injected defect in
+          07_break_the_data.py -- a 12x tip on a plausible fare passes every
+          silver WHERE clause and is stopped only here.
+        tests:
+          - dbt_utils.accepted_range: {min_value: 0, max_value: 3}
+      - name: pickup_hour
+        tests:
+          - dbt_utils.accepted_range: {min_value: 0, max_value: 23}
+      - name: pickup_borough
+        description: "From source C. Null means an unmatched location_id."
+        tests:
+          - relationships:
+              to: ref('stg_zone_lookup')
+              field: borough
