@@ -271,4 +271,4 @@ bucket exists (`make init`) and that `MLFLOW_S3_ENDPOINT_URL` is set in the cont
 
 The trap that catches almost everyone: **`s3.path-style-access=true` is required locally and
 wrong on real S3**, which wants virtual-hosted addressing. It fails with a misleading
-DNS-style error. Full mapping in [`AWS.md`](AWS.md).
+DNS-style error.

@@ -9,8 +9,9 @@ no API keys.
 
 **This is a teaching rig, not a production architecture.** In a real environment the object
 store is Amazon S3 and the engine is managed. The whole thing is built so that swap is a
-config change, not a rewrite — [`docs/AWS.md`](docs/AWS.md) shows exactly what changes and
-what stays byte-identical (spoiler: about 90% stays).
+config change, not a rewrite — roughly 90% of it (every dbt model, every test, the Parquet
+files and Iceberg metadata, the training script) transfers unchanged; what changes is
+endpoints, credentials, and who runs the scheduler.
 
 ## Prerequisites
 
@@ -80,9 +81,8 @@ Attribution and citation requirements: [`docs/DATA_SOURCES.md`](docs/DATA_SOURCE
    field shifts every column right and still passes type validation. The row arrives fully
    typed, fully "valid", and completely wrong.
 5. **A gate only earns its keep against a defect the filters miss.** Hence `make break`.
-6. **Cost is driven by what you leave running, not what you store.** See `docs/AWS.md` — at
-   this scale storage and queries run about $6/month while an always-on tracking server runs
-   $96–438.
+6. **Cost is driven by what you leave running, not what you store.** At this scale storage
+   and queries run about $6/month while an always-on tracking server runs $96–438.
 
 ## What you should see
 
@@ -121,7 +121,7 @@ trino/etc/catalog/   the Iceberg ↔ Nessie ↔ S3 wiring (highest-risk config)
 scripts/             numbered: what you actually run
 dbt/                 models + the tests that ARE the gate
 validated/           offline reference implementation, proven before any container existed
-docs/                AWS mapping, messy sources, troubleshooting, data attribution
+docs/                messy sources, troubleshooting, data attribution
 ```
 
 ## Licence

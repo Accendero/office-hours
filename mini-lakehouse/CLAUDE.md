@@ -8,7 +8,7 @@ the operational summary.
 
 A laptop-only teaching rig for a mini lakehouse: object storage → Iceberg → medallion
 (bronze/silver/gold) → quality gate → trained model with tracked lineage. It is NOT a
-production architecture. In a real environment the object store is S3; see `docs/AWS.md`.
+production architecture. In a real environment the object store is S3.
 
 Stack: SeaweedFS (S3) + Nessie (Iceberg REST catalog) + Trino (engine) + dbt-trino
 (transforms) + MLflow + Postgres (tracking).
